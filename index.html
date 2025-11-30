@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Band Setlist Builder</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f2f2f2; }
+    h1 { margin-bottom: 10px; }
+    #song-list { min-height: 150px; max-height: 300px; overflow-y: auto; padding: 10px; background: white; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 20px; }
+    #set1, #set2, #set3 { min-height: 150px; max-height: 300px; overflow-y: auto; padding: 10px; background: white; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 20px; }
+    .song { padding: 8px; margin: 5px 0; background: #e9e9e9; border-radius: 5px; display: flex; align-items: center; gap: 10px; }
+    .set1-highlight { background-color: #ffd1d1; }
+    .set2-highlight { background-color: #d1d1ff; }
+    .set3-highlight { background-color: #d1ffd1; }
+    .section { margin-bottom: 30px; }
+    button { padding: 10px 15px; border: none; background: #007bff; color: white; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    input[type=text] { padding: 8px; border-radius: 6px; border: 1px solid #ccc; margin-right: 5px; }
+    select { padding: 5px; border-radius: 6px; border: 1px solid #ccc; margin-bottom: 10px; }
+    .genre-box { width: 100px; padding: 5px; border-radius: 6px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>Band Setlist Builder</h1>
+
+  <div class="section">
+    <h3>Global Set Options</h3>
+    <label><input type="radio" name="globalSet" value="1"> 1 Set</label>
+    <label><input type="radio" name="globalSet" value="2" checked> 2 Sets</label>
+    <label><input type="radio" name="globalSet" value="3"> 3 Sets</label>
+  </div>
+
+  <div class="section">
+    <h3>Filter by Genre</h3>
+    <select id="genreFilter" onchange="filterByGenre()">
+      <option value="">All Genres</option>
+    </select>
+  </div>
+
+  <div class="section">
+    <h3>Import Songs from Excel (.xlsx)</h3>
+    <input type="file" id="excelFile" accept=".xlsx,.xls" />
+    <p>Excel format: Column A = Song Title, Column B = Genre (optional)</p>
+  </div>
+
+  <div class="section">
+    <h3>Add Song Manually</h3>
+    <input type="text" id="newSong" placeholder="Song Title" />
+    <input type="text" id="newGenre" placeholder="Genre" />
+    <button onclick="addSong()">Add Song</button>
+  </div>
+
+  <div class="section">
+    <h3>All Songs</h3>
+    <div id="song-list"></div>
+  </div>
+
+  <div class="section">
+    <h3>Setlists</h3>
+    <div style="display: flex; gap: 20px;">
+      <div style="flex: 1;" id="set1Container">
+        <h4>Set 1</h4>
+        <div id="set1"></div>
+      </div>
+      <div style="flex: 1;" id="set2Container">
+        <h4>Set 2</h4>
+        <div id="set2"></div>
+      </div>
+      <div style="flex: 1;" id="set3Container">
+        <h4>Set 3</h4>
+        <div id="set3"></div>
+      </div>
+    </div>
+    <br />
+    <button onclick="exportSetlist()">Export Setlist to Text File</button>
+    <button onclick="exportPDF()">Export Setlist as PDF</button>
+  </div>
+
+  <script type="module">
+    import jsPDF from 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+
+    window.generatePDF = function(set1El, set2El, set3El) {
+      const doc = new jsPDF({ format: 'a4' });
+      const sets = [[set1El, 'Set 1'], [set2El, 'Set 2'], [set3El, 'Set 3']];
+      let pageIndex = 0;
+      sets.forEach(([el, name]) => {
+        if (el.children.length === 0) return;
+        if (pageIndex > 0) doc.addPage();
+        doc.setFontSize(16);
+        doc.text(name, 20, 20);
+        doc.setFontSize(12);
+        let y = 30;
+        [...el.children].forEach((child, index) => {
+          doc.text(`${index + 1}. ${child.textContent}`, 20, y);
+          y += 10;
+        });
+        pageIndex++;
+      });
+      doc.save('setlist.pdf');
+    }
+  </script>
+
+  <script>
+    const songListEl = document.getElementById("song-list");
+    const set1El = document.getElementById("set1");
+    const set2El = document.getElementById("set2");
+    const set3El = document.getElementById("set3");
+    const genreFilterEl = document.getElementById("genreFilter");
+    const setContainers = [document.getElementById("set1Container"), document.getElementById("set2Container"), document.getElementById("set3Container")];
+
+    let globalSetCount = 2;
+    let allSongsData = [];
+
+    document.getElementsByName('globalSet').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        globalSetCount = parseInt(e.target.value);
+        updateSetContainers();
+        updateSongsForGlobalSet();
+        saveToLocalStorage();
+      });
+    });
+
+    function updateSetContainers(){
+      setContainers.forEach((container,index)=>{
+        container.style.display = (index < globalSetCount) ? 'block' : 'none';
+      });
+    }
+
+    function updateSongsForGlobalSet(){
+      document.querySelectorAll('#song-list .song').forEach(wrapper=>{
+        const checkboxes = wrapper.querySelectorAll('input[type=checkbox]');
+        const spans = wrapper.querySelectorAll('span');
+        checkboxes.forEach((cb,index)=>{
+          cb.checked = false;
+          if(index >= globalSetCount){
+            cb.style.display='none';
+            spans[index].textContent='';
+          } else {
+            cb.style.display='inline-block';
+            spans[index].textContent = `Set ${index+1}:`;
+          }
+        });
+        updateHighlight(wrapper);
+      });
+    }
+
+    document.getElementById("excelFile").addEventListener("change", handleExcel);
+
+    function handleExcel(event){
+      const file = event.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e){
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+
+        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
+        const startRow = (rows[0][0] || "").toString().toLowerCase().includes("song") ? 1 : 0;
+
+        // Clear previous songs before importing
+        songListEl.innerHTML = '';
+        allSongsData = [];
+
+        for(let i=startRow; i<rows.length; i++){
+          const row = rows[i];
+          if(!row || row.length === 0) continue;
+          const song = (row[0] || "").toString().trim();
+          const genre = (row[1] || "").toString().trim();
+          if(song) addSongToList(song, genre);
+        }
+
+        saveToLocalStorage();
+        populateGenreFilter();
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function addSong(){
+      const songInput = document.getElementById('newSong');
+      const genreInput = document.getElementById('newGenre');
+      const song = songInput.value.trim();
+      const genre = genreInput.value.trim();
+      if(!song) return;
+      songInput.value='';
+      genreInput.value='';
+      addSongToList(song, genre);
+      saveToLocalStorage();
+      populateGenreFilter();
+    }
+
+    function addSongToList(song, genre=''){
+      const wrapper = document.createElement('div');
+      wrapper.className='song';
+
+      const checkboxes=[];
+      const spans=[];
+      for(let i=0;i<3;i++){
+        const span=document.createElement('span');
+        const cb=document.createElement('input');
+        cb.type='checkbox';
+        cb.addEventListener('change',()=> {
+          handleSetChange(wrapper, cb.checked, [set1El,set2El,set3El][i], i);
+          saveToLocalStorage();
+        });
+        cb.style.display = (i<globalSetCount) ? 'inline-block' : 'none';
+        span.textContent = (i<globalSetCount) ? `Set ${i+1}:` : '';
+        spans.push(span);
+        checkboxes.push(cb);
+      }
+
+      const songDiv = document.createElement('div');
+      songDiv.textContent = song;
+      songDiv.dataset.genre = genre;
+      songDiv.dataset.song = song;
+      wrapper.appendChild(songDiv);
+
+      const genreBox = document.createElement('input');
+      genreBox.type = 'text';
+      genreBox.value = genre;
+      genreBox.className = 'genre-box';
+      genreBox.readOnly = true;
+      wrapper.insertBefore(genreBox, songDiv);
+
+      for(let i=0;i<3;i++){
+        wrapper.insertBefore(checkboxes[i], songDiv);
+        wrapper.insertBefore(spans[i], checkboxes[i]);
+      }
+
+      songListEl.appendChild(wrapper);
+      allSongsData.push({song, genre});
+    }
+
+    function filterByGenre(){
+      const genre = genreFilterEl.value;
+      document.querySelectorAll('#song-list .song').forEach(wrapper => {
+        const songGenre = wrapper.querySelector('div').dataset.genre || '';
+        wrapper.style.display = (!genre || genre === songGenre) ? 'flex' : 'none';
+      });
+    }
+
+    function populateGenreFilter(){
+      const genres = [...new Set(allSongsData.map(s => s.genre).filter(g => g))];
+      genreFilterEl.innerHTML = '<option value="">All Genres</option>' + genres.map(g => `<option value="${g}">${g}</option>`).join('');
+    }
+
+    function updateHighlight(wrapper){
+      wrapper.classList.remove('set1-highlight','set2-highlight','set3-highlight');
+      const checkboxes = wrapper.querySelectorAll('input[type=checkbox]');
+      checkboxes.forEach((cb,index)=>{
+        if(cb.checked){
+          wrapper.classList.add(['set1-highlight','set2-highlight','set3-highlight'][index]);
+        }
+      });
+    }
+
+    function handleSetChange(wrapper,isChecked,setEl,setIndex){
+      const songDiv = wrapper.querySelector('div');
+      if(isChecked){
+        const clone = songDiv.cloneNode(true);
+        setEl.appendChild(clone);
+      } else {
+        Array.from(setEl.children).forEach(child=>{
+          if(child.dataset.song === songDiv.dataset.song){
+            setEl.removeChild(child);
+          }
+        });
+      }
+      updateSetNumbers(setEl);
+      updateHighlight(wrapper);
+    }
+
+    function updateSetNumbers(setEl){
+      Array.from(setEl.children).forEach((child,index)=>{
+        child.textContent=`${index+1}. ${child.textContent.replace(/^\d+\.\s*/,'')}`;
+      });
+    }
+
+    function saveToLocalStorage(){
+      localStorage.setItem('bandSetlistSongs', JSON.stringify(allSongsData));
+      localStorage.setItem('bandSetlistGlobalSetCount', globalSetCount);
+    }
+
+    function loadFromLocalStorage(){
+      const saved = JSON.parse(localStorage.getItem('bandSetlistSongs')||'[]');
+      const savedGlobal = parseInt(localStorage.getItem('bandSetlistGlobalSetCount')) || 2;
+      globalSetCount = savedGlobal;
+      document.getElementsByName('globalSet').forEach(radio => {
+        radio.checked = (parseInt(radio.value) === globalSetCount);
+      });
+      if(saved.length) saved.forEach(s => addSongToList(s.song, s.genre));
+      populateGenreFilter();
+    }
+
+    function exportSetlist(){
+      let text='';
+      [['Set 1',set1El],['Set 2',set2El],['Set 3',set3El]].forEach(([name,el])=>{
+        text+=name+'\n';
+        text+=[...el.querySelectorAll('div')].map(s=>s.textContent).join('\n')+'\n\n';
+      });
+      const blob=new Blob([text],{type:'text/plain'});
+      const link=document.createElement('a');
+      link.href=URL.createObjectURL(blob);
+      link.download='setlist.txt';
+      link.click();
+    }
+
+    function exportPDF(){
+      window.generatePDF(set1El,set2El,set3El);
+    }
+
+    loadFromLocalStorage();
+    updateSetContainers();
+  </script>
+</body>
+</html>
