@@ -79,15 +79,16 @@
   </div>
 
   <script type="module">
-    import jsPDF from 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+    import { jsPDF } from 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
 
     window.generatePDF = function(set1El, set2El, set3El) {
       const doc = new jsPDF({ format: 'a4' });
       const sets = [[set1El, 'Set 1'], [set2El, 'Set 2'], [set3El, 'Set 3']];
       let pageIndex = 0;
+
       sets.forEach(([el, name]) => {
-        if (el.children.length === 0) return;
-        if (pageIndex > 0) doc.addPage();
+        if(el.children.length === 0) return;
+        if(pageIndex > 0) doc.addPage();
         doc.setFontSize(16);
         doc.text(name, 20, 20);
         doc.setFontSize(12);
@@ -95,9 +96,14 @@
         [...el.children].forEach((child, index) => {
           doc.text(`${index + 1}. ${child.textContent}`, 20, y);
           y += 10;
+          if(y > 280){ // prevent overflow
+            doc.addPage();
+            y = 20;
+          }
         });
         pageIndex++;
       });
+
       doc.save('setlist.pdf');
     }
   </script>
@@ -211,18 +217,18 @@
         checkboxes.push(cb);
       }
 
-      const songDiv = document.createElement('div');
-      songDiv.textContent = song;
-      songDiv.dataset.genre = genre;
-      songDiv.dataset.song = song;
-      wrapper.appendChild(songDiv);
-
       const genreBox = document.createElement('input');
       genreBox.type = 'text';
       genreBox.value = genre;
       genreBox.className = 'genre-box';
       genreBox.readOnly = true;
-      wrapper.insertBefore(genreBox, songDiv);
+      wrapper.appendChild(genreBox);
+
+      const songDiv = document.createElement('div');
+      songDiv.textContent = song;
+      songDiv.dataset.genre = genre;
+      songDiv.dataset.song = song;
+      wrapper.appendChild(songDiv);
 
       for(let i=0;i<3;i++){
         wrapper.insertBefore(checkboxes[i], songDiv);
