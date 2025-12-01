@@ -285,7 +285,7 @@
     function printSetlist(){
       const printWindow = window.open('', '', 'width=800,height=600');
       printWindow.document.write('<html><head><title>Setlist</title>');
-      printWindow.document.write('<style>@media print { .page { page-break-after: always; } }</style>');
+      printWindow.document.write('<style>body{font-family:Arial,sans-serif;margin:0;padding:20px;} .page { page-break-after: always; height: 100vh; box-sizing: border-box; } h2{margin-bottom:10px;} div.song-item{margin-bottom:5px;font-size:14px;}</style>');
       printWindow.document.write('</head><body>');
 
       const sets = [
@@ -299,7 +299,7 @@
           printWindow.document.write('<div class="page">');
           printWindow.document.write('<h2>' + name + '</h2>');
           [...el.children].forEach((child, index) => {
-            printWindow.document.write('<div>' + (index+1) + '. ' + child.textContent + '</div>');
+            printWindow.document.write('<div class="song-item">' + (index+1) + '. ' + child.textContent + '</div>');
           });
           printWindow.document.write('</div>');
         }
