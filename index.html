@@ -18,8 +18,6 @@
     button { padding: 10px 15px; border: none; background: #007bff; color: white; border-radius: 6px; cursor: pointer; }
     button:hover { background: #0056b3; }
     input[type=text] { padding: 8px; border-radius: 6px; border: 1px solid #ccc; margin-right: 5px; }
-    select { padding: 5px; border-radius: 6px; border: 1px solid #ccc; margin-bottom: 10px; }
-    .genre-box { width: 100px; padding: 5px; border-radius: 6px; border: 1px solid #ccc; }
   </style>
 </head>
 <body>
@@ -33,22 +31,13 @@
   </div>
 
   <div class="section">
-    <h3>Filter by Genre</h3>
-    <select id="genreFilter" onchange="filterByGenre()">
-      <option value="">All Genres</option>
-    </select>
-  </div>
-
-  <div class="section">
     <h3>Import Songs from Excel (.xlsx)</h3>
     <input type="file" id="excelFile" accept=".xlsx,.xls" />
-    <p>Excel format: Column A = Song Title, Column B = Genre (optional)</p>
   </div>
 
   <div class="section">
     <h3>Add Song Manually</h3>
     <input type="text" id="newSong" placeholder="Song Title" />
-    <input type="text" id="newGenre" placeholder="Genre" />
     <button onclick="addSong()">Add Song</button>
   </div>
 
@@ -76,6 +65,7 @@
     <br />
     <button onclick="exportSetlist()">Export Setlist to Text File</button>
     <button onclick="printSetlist()">Print / Export PDF</button>
+    <button onclick="aiOrderSets()">AI Order Setlists</button>
   </div>
 
   <script>
@@ -83,162 +73,128 @@
     const set1El = document.getElementById("set1");
     const set2El = document.getElementById("set2");
     const set3El = document.getElementById("set3");
-    const genreFilterEl = document.getElementById("genreFilter");
-    const setContainers = [document.getElementById("set1Container"), document.getElementById("set2Container"), document.getElementById("set3Container")];
+    const setContainers = [
+      document.getElementById("set1Container"),
+      document.getElementById("set2Container"),
+      document.getElementById("set3Container")
+    ];
 
     let globalSetCount = 2;
-    let allSongsData = [];
-
-    document.getElementsByName('globalSet').forEach(radio => {
-      radio.addEventListener('change', (e) => {
+    document.getElementsByName("globalSet").forEach(radio => {
+      radio.addEventListener("change", (e) => {
         globalSetCount = parseInt(e.target.value);
         updateSetContainers();
         updateSongsForGlobalSet();
-        saveToLocalStorage();
       });
     });
 
-    function updateSetContainers(){
-      setContainers.forEach((container,index)=>{
-        container.style.display = (index < globalSetCount) ? 'block' : 'none';
+    function updateSetContainers() {
+      setContainers.forEach((container, index) => {
+        container.style.display = index < globalSetCount ? "block" : "none";
       });
     }
 
-    function updateSongsForGlobalSet(){
-      document.querySelectorAll('#song-list .song').forEach(wrapper=>{
+    function updateSongsForGlobalSet() {
+      document.querySelectorAll('#song-list .song').forEach(wrapper => {
         const checkboxes = wrapper.querySelectorAll('input[type=checkbox]');
         const spans = wrapper.querySelectorAll('span');
-        checkboxes.forEach((cb,index)=>{
-          cb.checked = false;
-          if(index >= globalSetCount){
-            cb.style.display='none';
-            spans[index].textContent='';
+
+        checkboxes.forEach((cb, index) => {
+          if (index >= globalSetCount) {
+            if (cb.checked) {
+              handleSetChange(wrapper, false, [set1El, set2El, set3El][index], index);
+            }
+            cb.style.display = 'none';
+            cb.checked = false;
+            spans[index].textContent = '';
           } else {
-            cb.style.display='inline-block';
-            spans[index].textContent = `Set ${index+1}:`;
+            cb.style.display = 'inline-block';
+            spans[index].textContent = `Set ${index + 1}:`;
           }
         });
+
         updateHighlight(wrapper);
       });
     }
 
     document.getElementById("excelFile").addEventListener("change", handleExcel);
 
-    function handleExcel(event){
+    function handleExcel(event) {
       const file = event.target.files[0];
-      if(!file) return;
       const reader = new FileReader();
-      reader.onload = function(e){
+      reader.onload = function(e) {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: "array" });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
-        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
-        const startRow = (rows[0][0] || "").toString().toLowerCase().includes("song") ? 1 : 0;
-
-        songListEl.innerHTML = '';
-        allSongsData = [];
-
-        for(let i=startRow; i<rows.length; i++){
-          const row = rows[i];
-          if(!row || row.length === 0) continue;
-          const song = (row[0] || "").toString().trim();
-          const genre = (row[1] || "").toString().trim();
-          if(song) addSongToList(song, genre);
-        }
-
-        saveToLocalStorage();
-        populateGenreFilter();
+        const songs = rows.map(r => r[0]).filter(Boolean);
+        loadSongs(songs);
       };
       reader.readAsArrayBuffer(file);
     }
 
-    function addSong(){
-      const songInput = document.getElementById('newSong');
-      const genreInput = document.getElementById('newGenre');
-      const song = songInput.value.trim();
-      const genre = genreInput.value.trim();
-      if(!song) return;
-      songInput.value='';
-      genreInput.value='';
-      addSongToList(song, genre);
-      saveToLocalStorage();
-      populateGenreFilter();
+    function addSong() {
+      const input = document.getElementById("newSong");
+      const song = input.value.trim();
+      if (!song) return;
+      input.value = "";
+      addSongToList(song);
     }
 
-    function addSongToList(song, genre=''){
-      const wrapper = document.createElement('div');
-      wrapper.className='song';
+    function addSongToList(song) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "song";
 
-      const checkboxes=[];
-      const spans=[];
-      for(let i=0;i<3;i++){
-        const span=document.createElement('span');
-        const cb=document.createElement('input');
-        cb.type='checkbox';
-        cb.addEventListener('change',()=> {
-          handleSetChange(wrapper, cb.checked, [set1El,set2El,set3El][i], i);
-          saveToLocalStorage();
-        });
-        cb.style.display = (i<globalSetCount) ? 'inline-block' : 'none';
-        span.textContent = (i<globalSetCount) ? `Set ${i+1}:` : '';
+      const checkboxes = [];
+      const spans = [];
+
+      for (let i = 0; i < 3; i++) {
+        const span = document.createElement("span");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.addEventListener("change", () =>
+          handleSetChange(wrapper, cb.checked, [set1El, set2El, set3El][i], i)
+        );
+
+        cb.style.display = i < globalSetCount ? "inline-block" : "none";
+        span.textContent = i < globalSetCount ? `Set ${i + 1}:` : "";
+
         spans.push(span);
         checkboxes.push(cb);
       }
 
-      const genreBox = document.createElement('input');
-      genreBox.type = 'text';
-      genreBox.value = genre;
-      genreBox.className = 'genre-box';
-      genreBox.readOnly = true;
-      wrapper.appendChild(genreBox);
-
-      const songDiv = document.createElement('div');
+      const songDiv = document.createElement("div");
       songDiv.textContent = song;
-      songDiv.dataset.genre = genre;
-      songDiv.dataset.song = song;
+
       wrapper.appendChild(songDiv);
 
-      for(let i=0;i<3;i++){
+      for (let i = 0; i < 3; i++) {
         wrapper.insertBefore(checkboxes[i], songDiv);
         wrapper.insertBefore(spans[i], checkboxes[i]);
       }
 
       songListEl.appendChild(wrapper);
-      allSongsData.push({song, genre});
     }
 
-    function filterByGenre(){
-      const genre = genreFilterEl.value;
-      document.querySelectorAll('#song-list .song').forEach(wrapper => {
-        const songGenre = wrapper.querySelector('div').dataset.genre || '';
-        wrapper.style.display = (!genre || genre === songGenre) ? 'flex' : 'none';
-      });
-    }
-
-    function populateGenreFilter(){
-      const genres = [...new Set(allSongsData.map(s => s.genre).filter(g => g))];
-      genreFilterEl.innerHTML = '<option value="">All Genres</option>' + genres.map(g => `<option value="${g}">${g}</option>`).join('');
-    }
-
-    function updateHighlight(wrapper){
-      wrapper.classList.remove('set1-highlight','set2-highlight','set3-highlight');
-      const checkboxes = wrapper.querySelectorAll('input[type=checkbox]');
-      checkboxes.forEach((cb,index)=>{
-        if(cb.checked){
-          wrapper.classList.add(['set1-highlight','set2-highlight','set3-highlight'][index]);
+    function updateHighlight(wrapper) {
+      wrapper.classList.remove("set1-highlight", "set2-highlight", "set3-highlight");
+      const checkboxes = wrapper.querySelectorAll("input[type=checkbox]");
+      checkboxes.forEach((cb, index) => {
+        if (cb.checked) {
+          wrapper.classList.add(["set1-highlight", "set2-highlight", "set3-highlight"][index]);
         }
       });
     }
 
-    function handleSetChange(wrapper,isChecked,setEl,setIndex){
-      const songDiv = wrapper.querySelector('div');
-      if(isChecked){
+    function handleSetChange(wrapper, isChecked, setEl, setIndex) {
+      const songDiv = wrapper.querySelector("div");
+      if (isChecked) {
         const clone = songDiv.cloneNode(true);
         setEl.appendChild(clone);
       } else {
-        Array.from(setEl.children).forEach(child=>{
-          if(child.dataset.song === songDiv.dataset.song){
+        Array.from(setEl.children).forEach(child => {
+          if (child.textContent.replace(/^\d+\.\s*/, "") === songDiv.textContent) {
             setEl.removeChild(child);
           }
         });
@@ -247,72 +203,92 @@
       updateHighlight(wrapper);
     }
 
-    function updateSetNumbers(setEl){
-      Array.from(setEl.children).forEach((child,index)=>{
-        child.textContent=`${index+1}. ${child.textContent.replace(/^\d+\.\s*/,'')}`;
+    function updateSetNumbers(setEl) {
+      Array.from(setEl.children).forEach((child, index) => {
+        child.textContent = `${index + 1}. ${child.textContent.replace(/^\d+\.\s*/, "")}`;
       });
     }
 
-    function saveToLocalStorage(){
-      localStorage.setItem('bandSetlistSongs', JSON.stringify(allSongsData));
-      localStorage.setItem('bandSetlistGlobalSetCount', globalSetCount);
+    function loadSongs(songs) {
+      songs.forEach(song => {
+        if (song) addSongToList(song);
+      });
     }
 
-    function loadFromLocalStorage(){
-      const saved = JSON.parse(localStorage.getItem('bandSetlistSongs')||'[]');
-      const savedGlobal = parseInt(localStorage.getItem('bandSetlistGlobalSetCount')) || 2;
-      globalSetCount = savedGlobal;
-      document.getElementsByName('globalSet').forEach(radio => {
-        radio.checked = (parseInt(radio.value) === globalSetCount);
+    function exportSetlist() {
+      let text = "";
+      [["Set 1", set1El], ["Set 2", set2El], ["Set 3", set3El]].forEach(([name, el]) => {
+        text += name + "\n";
+        text += [...el.querySelectorAll("div")].map(s => s.textContent).join("\n") + "\n\n";
       });
-      if(saved.length) saved.forEach(s => addSongToList(s.song, s.genre));
-      populateGenreFilter();
-    }
 
-    function exportSetlist(){
-      let text='';
-      [['Set 1',set1El],['Set 2',set2El],['Set 3',set3El]].forEach(([name,el])=>{
-        text+=name+'\n';
-        text+=[...el.querySelectorAll('div')].map(s=>s.textContent).join('\n')+'\n\n';
-      });
-      const blob=new Blob([text],{type:'text/plain'});
-      const link=document.createElement('a');
-      link.href=URL.createObjectURL(blob);
-      link.download='setlist.txt';
+      const blob = new Blob([text], { type: "text/plain" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "setlist.txt";
       link.click();
     }
 
-    function printSetlist(){
-      const printWindow = window.open('', '', 'width=800,height=600');
-      printWindow.document.write('<html><head><title>Setlist</title>');
-      printWindow.document.write('<style>body{font-family:Arial,sans-serif;margin:0;padding:20px;} .page { page-break-after: always; height: 100vh; box-sizing: border-box; } h2{margin-bottom:10px;} div.song-item{margin-bottom:5px;font-size:14px;}</style>');
-      printWindow.document.write('</head><body>');
+    function printSetlist() {
+      const win = window.open("", "", "width=800,height=600");
+      win.document.write("<html><head><title>Print Setlist</title>");
+      win.document.write("<style>@media print {.page{page-break-after:always;} body{font-family:Arial;}}</style>");
+      win.document.write("</head><body>");
 
       const sets = [
-        {el: set1El, name: 'Set 1'},
-        {el: set2El, name: 'Set 2'},
-        {el: set3El, name: 'Set 3'}
+        { name: "Set 1", el: set1El },
+        { name: "Set 2", el: set2El },
+        { name: "Set 3", el: set3El }
       ];
 
-      sets.forEach(({el, name}) => {
-        if(el.children.length > 0){
-          printWindow.document.write('<div class="page">');
-          printWindow.document.write('<h2>' + name + '</h2>');
+      sets.forEach(({ name, el }) => {
+        if (el.children.length) {
+          win.document.write('<div class="page">');
+          win.document.write(`<h2>${name}</h2>`);
           [...el.children].forEach((child, index) => {
-            printWindow.document.write('<div class="song-item">' + (index+1) + '. ' + child.textContent + '</div>');
+            win.document.write(`${index + 1}. ${child.textContent.replace(/^\d+\.\s*/, "")}<br>`);
           });
-          printWindow.document.write('</div>');
+          win.document.write("</div>");
         }
       });
 
-      printWindow.document.write('</body></html>');
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
+      win.document.write("</body></html>");
+      win.document.close();
+      win.focus();
+      win.print();
     }
 
-    loadFromLocalStorage();
+    /*** ------------------------------
+     *   AI ORDER SETLIST FUNCTION
+     * ------------------------------ */
+    function aiOrderSets() {
+      const sets = [
+        { name: "Set 1", el: set1El },
+        { name: "Set 2", el: set2El },
+        { name: "Set 3", el: set3El }
+      ];
+
+      let prompt = "Reorder these band setlists for the best musical flow. Only return the reordered song titles under each Set header.\n\n";
+
+      sets.forEach(({ name, el }) => {
+        if (el.children.length) {
+          prompt += name + ":\n";
+          [...el.children].forEach(child => {
+            const song = child.textContent.replace(/^\d+\.\s*/, "");
+            prompt += "- " + song + "\n";
+          });
+          prompt += "\n";
+        }
+      });
+
+      navigator.clipboard.writeText(prompt).then(() => {
+        window.open("https://chat.openai.com/#ai-setlist", "_blank");
+        alert("Your setlists are ready! ChatGPT opened in a new tab.\nJust press CTRL+V and hit Enter.");
+      });
+    }
+
     updateSetContainers();
   </script>
+
 </body>
 </html>
