@@ -75,38 +75,8 @@
     </div>
     <br />
     <button onclick="exportSetlist()">Export Setlist to Text File</button>
-    <button onclick="exportPDF()">Export Setlist as PDF</button>
+    <button onclick="printSetlist()">Print / Export PDF</button>
   </div>
-
-  <script type="module">
-    import { jsPDF } from 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
-
-    window.generatePDF = function(set1El, set2El, set3El) {
-      const doc = new jsPDF({ format: 'a4' });
-      const sets = [[set1El, 'Set 1'], [set2El, 'Set 2'], [set3El, 'Set 3']];
-      let pageIndex = 0;
-
-      sets.forEach(([el, name]) => {
-        if(el.children.length === 0) return;
-        if(pageIndex > 0) doc.addPage();
-        doc.setFontSize(16);
-        doc.text(name, 20, 20);
-        doc.setFontSize(12);
-        let y = 30;
-        [...el.children].forEach((child, index) => {
-          doc.text(`${index + 1}. ${child.textContent}`, 20, y);
-          y += 10;
-          if(y > 280){ // prevent overflow
-            doc.addPage();
-            y = 20;
-          }
-        });
-        pageIndex++;
-      });
-
-      doc.save('setlist.pdf');
-    }
-  </script>
 
   <script>
     const songListEl = document.getElementById("song-list");
@@ -166,7 +136,6 @@
         const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
         const startRow = (rows[0][0] || "").toString().toLowerCase().includes("song") ? 1 : 0;
 
-        // Clear previous songs before importing
         songListEl.innerHTML = '';
         allSongsData = [];
 
@@ -313,8 +282,33 @@
       link.click();
     }
 
-    function exportPDF(){
-      window.generatePDF(set1El,set2El,set3El);
+    function printSetlist(){
+      const printWindow = window.open('', '', 'width=800,height=600');
+      printWindow.document.write('<html><head><title>Setlist</title>');
+      printWindow.document.write('<style>@media print { .page { page-break-after: always; } }</style>');
+      printWindow.document.write('</head><body>');
+
+      const sets = [
+        {el: set1El, name: 'Set 1'},
+        {el: set2El, name: 'Set 2'},
+        {el: set3El, name: 'Set 3'}
+      ];
+
+      sets.forEach(({el, name}) => {
+        if(el.children.length > 0){
+          printWindow.document.write('<div class="page">');
+          printWindow.document.write('<h2>' + name + '</h2>');
+          [...el.children].forEach((child, index) => {
+            printWindow.document.write('<div>' + (index+1) + '. ' + child.textContent + '</div>');
+          });
+          printWindow.document.write('</div>');
+        }
+      });
+
+      printWindow.document.write('</body></html>');
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
     }
 
     loadFromLocalStorage();
