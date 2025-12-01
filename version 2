@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Band Setlist Builder</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f2f2f2; }
+    h1 { margin-bottom: 10px; }
+    #song-list { min-height: 150px; max-height: 300px; overflow-y: auto; padding: 10px; background: white; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 20px; }
+    #set1, #set2, #set3 { min-height: 150px; max-height: 300px; overflow-y: auto; padding: 10px; background: white; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 20px; }
+    .song { padding: 8px; margin: 5px 0; background: #e9e9e9; border-radius: 5px; display: flex; align-items: center; gap: 10px; }
+    .set1-highlight { background-color: #ffd1d1; }
+    .set2-highlight { background-color: #d1d1ff; }
+    .set3-highlight { background-color: #d1ffd1; }
+    .section { margin-bottom: 30px; }
+    button { padding: 10px 15px; border: none; background: #007bff; color: white; border-radius: 6px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    input[type=text] { padding: 8px; border-radius: 6px; border: 1px solid #ccc; margin-right: 5px; }
+  </style>
+</head>
+<body>
+  <h1>Band Setlist Builder</h1>
+
+  <div class="section">
+    <h3>Global Set Options</h3>
+    <label><input type="radio" name="globalSet" value="1"> 1 Set</label>
+    <label><input type="radio" name="globalSet" value="2" checked> 2 Sets</label>
+    <label><input type="radio" name="globalSet" value="3"> 3 Sets</label>
+  </div>
+
+  <div class="section">
+    <h3>Import Songs from Excel (.xlsx)</h3>
+    <input type="file" id="excelFile" accept=".xlsx,.xls" />
+  </div>
+
+  <div class="section">
+    <h3>Add Song Manually</h3>
+    <input type="text" id="newSong" placeholder="Song Title" />
+    <button onclick="addSong()">Add Song</button>
+  </div>
+
+  <div class="section">
+    <h3>All Songs</h3>
+    <div id="song-list"></div>
+  </div>
+
+  <div class="section">
+    <h3>Setlists</h3>
+    <div style="display: flex; gap: 20px;">
+      <div style="flex: 1;" id="set1Container">
+        <h4>Set 1</h4>
+        <div id="set1"></div>
+      </div>
+      <div style="flex: 1;" id="set2Container">
+        <h4>Set 2</h4>
+        <div id="set2"></div>
+      </div>
+      <div style="flex: 1;" id="set3Container">
+        <h4>Set 3</h4>
+        <div id="set3"></div>
+      </div>
+    </div>
+    <br />
+    <button onclick="exportSetlist()">Export Setlist to Text File</button>
+    <button onclick="printSetlist()">Print / Export PDF</button>
+    <button onclick="aiOrderSets()">AI Order Setlists</button>
+  </div>
+
+  <script>
+    const songListEl = document.getElementById("song-list");
+    const set1El = document.getElementById("set1");
+    const set2El = document.getElementById("set2");
+    const set3El = document.getElementById("set3");
+    const setContainers = [
+      document.getElementById("set1Container"),
+      document.getElementById("set2Container"),
+      document.getElementById("set3Container")
+    ];
+
+    let globalSetCount = 2;
+    document.getElementsByName("globalSet").forEach(radio => {
+      radio.addEventListener("change", (e) => {
+        globalSetCount = parseInt(e.target.value);
+        updateSetContainers();
+        updateSongsForGlobalSet();
+      });
+    });
+
+    function updateSetContainers() {
+      setContainers.forEach((container, index) => {
+        container.style.display = index < globalSetCount ? "block" : "none";
+      });
+    }
+
+    function updateSongsForGlobalSet() {
+      document.querySelectorAll('#song-list .song').forEach(wrapper => {
+        const checkboxes = wrapper.querySelectorAll('input[type=checkbox]');
+        const spans = wrapper.querySelectorAll('span');
+
+        checkboxes.forEach((cb, index) => {
+          if (index >= globalSetCount) {
+            if (cb.checked) {
+              handleSetChange(wrapper, false, [set1El, set2El, set3El][index], index);
+            }
+            cb.style.display = 'none';
+            cb.checked = false;
+            spans[index].textContent = '';
+          } else {
+            cb.style.display = 'inline-block';
+            spans[index].textContent = `Set ${index + 1}:`;
+          }
+        });
+
+        updateHighlight(wrapper);
+      });
+    }
+
+    document.getElementById("excelFile").addEventListener("change", handleExcel);
+
+    function handleExcel(event) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+        const songs = rows.map(r => r[0]).filter(Boolean);
+        loadSongs(songs);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function addSong() {
+      const input = document.getElementById("newSong");
+      const song = input.value.trim();
+      if (!song) return;
+      input.value = "";
+      addSongToList(song);
+    }
+
+    function addSongToList(song) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "song";
+
+      const checkboxes = [];
+      const spans = [];
+
+      for (let i = 0; i < 3; i++) {
+        const span = document.createElement("span");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.addEventListener("change", () =>
+          handleSetChange(wrapper, cb.checked, [set1El, set2El, set3El][i], i)
+        );
+
+        cb.style.display = i < globalSetCount ? "inline-block" : "none";
+        span.textContent = i < globalSetCount ? `Set ${i + 1}:` : "";
+
+        spans.push(span);
+        checkboxes.push(cb);
+      }
+
+      const songDiv = document.createElement("div");
+      songDiv.textContent = song;
+
+      wrapper.appendChild(songDiv);
+
+      for (let i = 0; i < 3; i++) {
+        wrapper.insertBefore(checkboxes[i], songDiv);
+        wrapper.insertBefore(spans[i], checkboxes[i]);
+      }
+
+      songListEl.appendChild(wrapper);
+    }
+
+    function updateHighlight(wrapper) {
+      wrapper.classList.remove("set1-highlight", "set2-highlight", "set3-highlight");
+      const checkboxes = wrapper.querySelectorAll("input[type=checkbox]");
+      checkboxes.forEach((cb, index) => {
+        if (cb.checked) {
+          wrapper.classList.add(["set1-highlight", "set2-highlight", "set3-highlight"][index]);
+        }
+      });
+    }
+
+    function handleSetChange(wrapper, isChecked, setEl, setIndex) {
+      const songDiv = wrapper.querySelector("div");
+      if (isChecked) {
+        const clone = songDiv.cloneNode(true);
+        setEl.appendChild(clone);
+      } else {
+        Array.from(setEl.children).forEach(child => {
+          if (child.textContent.replace(/^\d+\.\s*/, "") === songDiv.textContent) {
+            setEl.removeChild(child);
+          }
+        });
+      }
+      updateSetNumbers(setEl);
+      updateHighlight(wrapper);
+    }
+
+    function updateSetNumbers(setEl) {
+      Array.from(setEl.children).forEach((child, index) => {
+        child.textContent = `${index + 1}. ${child.textContent.replace(/^\d+\.\s*/, "")}`;
+      });
+    }
+
+    function loadSongs(songs) {
+      songs.forEach(song => {
+        if (song) addSongToList(song);
+      });
+    }
+
+    function exportSetlist() {
+      let text = "";
+      [["Set 1", set1El], ["Set 2", set2El], ["Set 3", set3El]].forEach(([name, el]) => {
+        text += name + "\n";
+        text += [...el.querySelectorAll("div")].map(s => s.textContent).join("\n") + "\n\n";
+      });
+
+      const blob = new Blob([text], { type: "text/plain" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "setlist.txt";
+      link.click();
+    }
+
+    function printSetlist() {
+      const win = window.open("", "", "width=800,height=600");
+      win.document.write("<html><head><title>Print Setlist</title>");
+      win.document.write("<style>@media print {.page{page-break-after:always;} body{font-family:Arial;}}</style>");
+      win.document.write("</head><body>");
+
+      const sets = [
+        { name: "Set 1", el: set1El },
+        { name: "Set 2", el: set2El },
+        { name: "Set 3", el: set3El }
+      ];
+
+      sets.forEach(({ name, el }) => {
+        if (el.children.length) {
+          win.document.write('<div class="page">');
+          win.document.write(`<h2>${name}</h2>`);
+          [...el.children].forEach((child, index) => {
+            win.document.write(`${index + 1}. ${child.textContent.replace(/^\d+\.\s*/, "")}<br>`);
+          });
+          win.document.write("</div>");
+        }
+      });
+
+      win.document.write("</body></html>");
+      win.document.close();
+      win.focus();
+      win.print();
+    }
+
+    /*** ------------------------------
+     *   AI ORDER SETLIST FUNCTION
+     * ------------------------------ */
+    function aiOrderSets() {
+      const sets = [
+        { name: "Set 1", el: set1El },
+        { name: "Set 2", el: set2El },
+        { name: "Set 3", el: set3El }
+      ];
+
+      let prompt = "Reorder these band setlists for the best musical flow. Only return the reordered song titles under each Set header.\n\n";
+
+      sets.forEach(({ name, el }) => {
+        if (el.children.length) {
+          prompt += name + ":\n";
+          [...el.children].forEach(child => {
+            const song = child.textContent.replace(/^\d+\.\s*/, "");
+            prompt += "- " + song + "\n";
+          });
+          prompt += "\n";
+        }
+      });
+
+      navigator.clipboard.writeText(prompt).then(() => {
+        window.open("https://chat.openai.com/#ai-setlist", "_blank");
+        alert("Your setlists are ready! ChatGPT opened in a new tab.\nJust press CTRL+V and hit Enter.");
+      });
+    }
+
+    updateSetContainers();
+  </script>
+
+</body>
+</html>
