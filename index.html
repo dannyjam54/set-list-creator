@@ -4,22 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Band Setlist Builder</title>
+  <!-- XLSX library for Excel import -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; background: #f2f2f2; }
-    h1 { margin-bottom: 10px; }
+    body { font-family: Arial, sans-serif; padding: 20px; background: #111; color: #fff; }
+    h1 { margin-bottom: 10px; color: #7df0ff; }
 
     #song-list {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
       grid-auto-rows: minmax(100px, auto);
       gap: 10px;
       max-height: 350px;
       overflow-y: auto;
       padding: 10px;
-      background: white;
+      background: #1c1c1c;
       border-radius: 8px;
-      border: 1px solid #ccc;
+      border: 1px solid #444;
     }
 
     .song {
@@ -27,7 +28,7 @@
       flex-direction: column;
       gap: 5px;
       padding: 8px;
-      background: #e9e9e9;
+      background: #2a2a2a;
       border-radius: 5px;
       font-size: 14px;
       word-wrap: break-word;
@@ -38,26 +39,32 @@
       max-height: 300px;
       overflow-y: auto;
       padding: 10px;
-      background: white;
+      background: #1c1c1c;
       border-radius: 8px;
-      border: 1px solid #ccc;
+      border: 1px solid #444;
       margin-bottom: 20px;
       display: flex;
       flex-direction: column;
     }
 
-    .set1-highlight { background-color: #ffd1d1; }
-    .set2-highlight { background-color: #d1d1ff; }
-    .set3-highlight { background-color: #d1ffd1; }
+    .set1-highlight { background-color: #3e2a2a; }
+    .set2-highlight { background-color: #2a2a3e; }
+    .set3-highlight { background-color: #2a3e2a; }
 
     .section { margin-bottom: 30px; }
-    button { padding: 6px 10px; border: none; background: #007bff; color: white; border-radius: 6px; cursor: pointer; font-size: 12px; }
-    button:hover { background: #0056b3; }
-    input[type=text] { padding: 6px; border-radius: 6px; border: 1px solid #ccc; margin-right: 5px; font-size: 13px; }
-    select { padding: 5px; border-radius: 6px; border: 1px solid #ccc; margin-bottom: 10px; }
-    .genre-box { width: 80px; padding: 5px; border-radius: 6px; border: 1px solid #ccc; font-size: 12px; }
-    span { font-size: 12px; margin-right: 3px; }
-    @media print { body{margin:0} .page{page-break-after:always;width:100%;height:100vh;box-sizing:border-box;padding:20mm} }
+    button { padding: 6px 10px; border: none; background: #0099cc; color: white; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    button:hover { background: #007399; }
+    input[type=text] { padding: 6px; border-radius: 6px; border: 1px solid #555; margin-right: 5px; font-size: 13px; background: #333; color: white; }
+
+    /* Print styles: one set per page, large font-sized list that fills the page */
+    @media print {
+      body { background: white; color: black; }
+      .print-page { page-break-after: always; width: 210mm; height: 297mm; box-sizing: border-box; padding: 20mm; display:flex; align-items:center; justify-content:center; }
+      .print-content { width:100%; }
+      .print-title { text-align:center; font-weight:700; margin-bottom:12px; }
+      .print-list { list-style: none; padding:0; margin:0; }
+      .print-list li { text-align:left; }
+    }
   </style>
 </head>
 <body>
@@ -71,22 +78,14 @@
   </div>
 
   <div class="section">
-    <h3>Filter by Genre</h3>
-    <select id="genreFilter" onchange="filterByGenre()">
-      <option value="">All Genres</option>
-    </select>
-  </div>
-
-  <div class="section">
     <h3>Import Songs from Excel (.xlsx)</h3>
     <input type="file" id="excelFile" accept=".xlsx,.xls" />
-    <p>Excel format: Column A = Song Title, Column B = Genre (optional)</p>
+    <p>Excel format: Column A = Song Title</p>
   </div>
 
   <div class="section">
     <h3>Add Song Manually</h3>
     <input type="text" id="newSong" placeholder="Song Title" />
-    <input type="text" id="newGenre" placeholder="Genre" />
     <button onclick="addSong()">Add Song</button>
   </div>
 
@@ -97,22 +96,21 @@
 
   <div class="section">
     <h3>Setlists</h3>
-    <div style="display: flex; gap: 20px;">
+    <div style="display: flex; gap: 20px; align-items:flex-start;">
       <div style="flex: 1;" id="set1Container">
         <h4>Set 1 <button onclick="clearSet(1)">Clear</button></h4>
-        <div id="set1" ondragover="setListAllowDrop(event)" ondrop="setListDrop(event, set1El)"></div>
+        <div id="set1"></div>
       </div>
       <div style="flex: 1;" id="set2Container">
         <h4>Set 2 <button onclick="clearSet(2)">Clear</button></h4>
-        <div id="set2" ondragover="setListAllowDrop(event)" ondrop="setListDrop(event, set2El)"></div>
+        <div id="set2"></div>
       </div>
       <div style="flex: 1;" id="set3Container">
         <h4>Set 3 <button onclick="clearSet(3)">Clear</button></h4>
-        <div id="set3" ondragover="setListAllowDrop(event)" ondrop="setListDrop(event, set3El)"></div>
+        <div id="set3"></div>
       </div>
     </div>
     <br />
-    <button onclick="exportSetlist()">Export Setlist to Text File</button>
     <button onclick="printSetlist()">Print / Export PDF</button>
     <button onclick="aiOrderSets()">AI Order Setlists</button>
   </div>
@@ -123,20 +121,19 @@
     const set2El = document.getElementById('set2');
     const set3El = document.getElementById('set3');
     const setContainers = [document.getElementById('set1Container'), document.getElementById('set2Container'), document.getElementById('set3Container')];
-    const genreFilterEl = document.getElementById('genreFilter');
 
     let globalSetCount = 2;
     let allSongsData = [];
-    let songCounter = 0;
-    let draggedEl = null;
 
+    // Load saved songs from localStorage on startup
     window.addEventListener('DOMContentLoaded', () => {
       const savedSongs = JSON.parse(localStorage.getItem('allSongsData') || '[]');
-      savedSongs.forEach(s => addSongToList(s.song, s.genre));
+      savedSongs.forEach(s => addSongToList(s.song));
       allSongsData = savedSongs;
-      populateGenreFilter();
+      updateSetContainers();
     });
 
+    // Global set radio handling
     document.getElementsByName('globalSet').forEach(radio => {
       radio.checked = parseInt(radio.value) === globalSetCount;
       radio.addEventListener('change', (e) => {
@@ -152,62 +149,57 @@
       });
     }
 
+    // Excel import
     document.getElementById('excelFile').addEventListener('change', handleExcel);
-
     function handleExcel(event){
       const file = event.target.files[0];
       if(!file) return;
       const reader = new FileReader();
       reader.onload = function(e){
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data,{type:'array'});
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+        try{
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data,{type:'array'});
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
 
-        songListEl.innerHTML='';
-        allSongsData=[];
+          songListEl.innerHTML='';
+          allSongsData=[];
 
-        rows.forEach(row => {
-          const song = (row[0]||'').toString().trim();
-          const genre = (row[1]||'').toString().trim();
-          if(song) addSongToList(song,genre);
-          allSongsData.push({song, genre});
-        });
+          rows.forEach(row => {
+            const song = (row[0]||'').toString().trim();
+            if(song) addSongToList(song);
+            allSongsData.push({song});
+          });
 
-        localStorage.setItem('allSongsData', JSON.stringify(allSongsData));
-        populateGenreFilter();
+          localStorage.setItem('allSongsData', JSON.stringify(allSongsData));
+        }catch(err){
+          alert('Error reading Excel file: '+err.message);
+        }
       };
       reader.readAsArrayBuffer(file);
     }
 
+    // Add song manually
     function addSong(){
       const songInput = document.getElementById('newSong');
-      const genreInput = document.getElementById('newGenre');
       const song = songInput.value.trim();
-      const genre = genreInput.value.trim();
       if(!song) return;
-      songInput.value=''; genreInput.value='';
-      addSongToList(song,genre);
+      songInput.value='';
+      addSongToList(song);
 
-      allSongsData.push({song, genre});
+      allSongsData.push({song});
       localStorage.setItem('allSongsData', JSON.stringify(allSongsData));
-      populateGenreFilter();
     }
 
-    function addSongToList(song, genre=''){
+    // Create song item in main list (no genre shown per your request)
+    function addSongToList(song){
       const wrapper = document.createElement('div');
       wrapper.className='song';
-      wrapper.dataset.id = 'song-' + (songCounter++);
 
       const songDiv = document.createElement('div');
       songDiv.textContent=song;
 
-      const genreBox = document.createElement('input');
-      genreBox.type='text';
-      genreBox.value=genre;
-      genreBox.className='genre-box';
-      genreBox.readOnly=true;
-
+      // checkbox container: one checkbox per possible set (1..3)
       const checkboxContainer = document.createElement('div');
       for(let i=0;i<3;i++){
         const cb = document.createElement('input');
@@ -220,39 +212,12 @@
         checkboxContainer.appendChild(cb);
       }
 
-      wrapper.appendChild(genreBox);
       wrapper.appendChild(songDiv);
       wrapper.appendChild(checkboxContainer);
       songListEl.appendChild(wrapper);
     }
 
-    // Setlist drag-and-drop for reordering
-    function setDragHandlers(el) {
-      el.draggable = true;
-      el.addEventListener('dragstart', (e) => { draggedEl = el; });
-    }
-
-    function setListAllowDrop(event) { event.preventDefault(); }
-
-    function setListDrop(event, setEl) {
-      event.preventDefault();
-      if(!draggedEl) return;
-      const afterElement = getDragAfterElement(setEl, event.clientY);
-      if(afterElement == null) setEl.appendChild(draggedEl);
-      else setEl.insertBefore(draggedEl, afterElement);
-      draggedEl = null;
-    }
-
-    function getDragAfterElement(container, y) {
-      const draggableElements = [...container.querySelectorAll('div')];
-      return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        if (offset < 0 && offset > closest.offset) return { offset, element: child };
-        else return closest;
-      }, { offset: Number.NEGATIVE_INFINITY }).element;
-    }
-
+    // Show/hide checkboxes when global set count changes; uncheck and remove from sets if no longer allowed.
     function updateSongCheckboxesForGlobalSet(){
       document.querySelectorAll('#song-list .song').forEach(wrapper => {
         const checkboxes = wrapper.querySelectorAll('input[type=checkbox]');
@@ -264,7 +229,8 @@
           } else {
             if (cb.checked) {
               cb.checked = false;
-              handleSetChange(wrapper, wrapper.querySelector('div'), false, i);
+              // remove from corresponding set
+              removeSongFromSet(wrapper.querySelector('div').textContent, i);
             }
             cb.style.display = 'none';
             labels[i].textContent = '';
@@ -273,50 +239,103 @@
       });
     }
 
+    // Add or remove song from a set when checkbox toggled
     function handleSetChange(wrapper,songDiv,cb,index){
-      if(!songDiv) return;
       const setEls = [set1El,set2El,set3El];
       const setEl = setEls[index];
       if(cb.checked){
-        const clone = songDiv.cloneNode(true);
-        setDragHandlers(clone);
-        setEl.appendChild(clone);
-        wrapper.classList.add(['set1-highlight','set2-highlight','set3-highlight'][index]);
+        // create a list item in the set
+        const li = document.createElement('div');
+        li.textContent = songDiv.textContent;
+        li.className = 'set-item';
+        setEl.appendChild(li);
       } else {
+        // remove from set
         Array.from(setEl.children).forEach(child=>{
-          if(child && child.textContent === songDiv.textContent) setEl.removeChild(child);
+          if(child.textContent === songDiv.textContent) setEl.removeChild(child);
         });
-        wrapper.classList.remove(['set1-highlight','set2-highlight','set3-highlight'][index]);
       }
     }
 
-    function populateGenreFilter(){
-      const genres = [...new Set(allSongsData.map(s=>s.genre).filter(g=>g))];
-      genreFilterEl.innerHTML='<option value="">All Genres</option>'+genres.map(g=>`<option value="${g}">${g}</option>`).join('');
-    }
-
-    function filterByGenre(){
-      const genre = genreFilterEl.value;
-      document.querySelectorAll('#song-list .song').forEach(wrapper=>{
-        const songGenre = wrapper.querySelector('.genre-box').value;
-        wrapper.style.display = (!genre || songGenre===genre)?'grid':'none';
-      });
-    }
-
-    function clearSet(num){
+    function removeSongFromSet(songName, setIndex){
       const setEls = [set1El,set2El,set3El];
-      const setEl = setEls[num-1];
-      setEl.innerHTML='';
-      document.querySelectorAll('#song-list .song').forEach(wrapper=>{
-        const cb = wrapper.querySelectorAll('input[type=checkbox]')[num-1];
-        if(cb) cb.checked=false;
-        wrapper.classList.remove(['set1-highlight','set2-highlight','set3-highlight'][num-1]);
+      const setEl = setEls[setIndex];
+      Array.from(setEl.children).forEach(child=>{
+        if(child.textContent === songName) setEl.removeChild(child);
       });
     }
 
-    function exportSetlist(){ /* placeholder */ }
-    function printSetlist(){ /* placeholder */ }
-    function aiOrderSets(){ /* placeholder */ }
+    // Clear a set
+    function clearSet(setNumber){
+      if(setNumber===1) set1El.innerHTML='';
+      else if(setNumber===2) set2El.innerHTML='';
+      else if(setNumber===3) set3El.innerHTML='';
+
+      // also uncheck checkboxes in main list for that set
+      document.querySelectorAll('#song-list .song').forEach(wrapper=>{
+        const cb = wrapper.querySelectorAll('input[type=checkbox]')[setNumber-1];
+        if(cb) cb.checked=false;
+      });
+    }
+
+    // Print setlists: one set per A4 page, no genre. Font-size auto-scaled to fill page.
+    function printSetlist(){
+      const setsToPrint = [];
+      if(globalSetCount >= 1) setsToPrint.push({title:'Set 1', el:set1El});
+      if(globalSetCount >= 2) setsToPrint.push({title:'Set 2', el:set2El});
+      if(globalSetCount >= 3) setsToPrint.push({title:'Set 3', el:set3El});
+
+      if(setsToPrint.length===0){ alert('No sets to print'); return; }
+
+      // Build print window content
+      const printWin = window.open('', '_blank');
+      if(!printWin) { alert('Could not open print window (popup blocked)'); return; }
+
+      const doc = printWin.document;
+      doc.write('<!doctype html><html><head><meta charset="utf-8"><title>Setlists</title>');
+      doc.write('<style>body{margin:0;font-family:Arial,Helvetica,sans-serif} .print-page{page-break-after:always;width:210mm;height:297mm;box-sizing:border-box;padding:20mm;display:flex;flex-direction:column;} .print-title{text-align:center;font-weight:700;margin-bottom:12px;} .print-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;justify-content:flex-start;} .print-list li{padding:4px 0;}</style>');
+      doc.write('</head><body>');
+
+      setsToPrint.forEach(setInfo=>{
+        const items = Array.from(setInfo.el.children).map(c=>c.textContent.trim()).filter(Boolean);
+        // create page wrapper
+        doc.write('<div class="print-page">');
+        doc.write('<div class="print-content">');
+        doc.write(`<div class="print-title">${setInfo.title}</div>`);
+        doc.write('<ul class="print-list">');
+        // compute font-size to approximately fill the page: start big and reduce
+        let fontSize = estimateFontSizeForCount(items.length);
+        doc.write(`<style>.print-list li{font-size:${fontSize}px}</style>`);
+        items.forEach((it)=>{ doc.write(`<li>${escapeHtml(it)}</li>`); });
+        doc.write('</ul>');
+        doc.write('</div></div>');
+      });
+
+      doc.write('</body></html>');
+      doc.close();
+      // give browser a moment to layout then print
+      setTimeout(()=>{ printWin.focus(); printWin.print(); }, 300);
+    }
+
+    // Estimate font size (pixels) so list fills page roughly — conservative calculation
+    function estimateFontSizeForCount(count){
+      if(count<=0) return 36;
+      // available vertical space in px roughly for 297mm - 40mm padding at 96dpi ~ (297-40)/25.4*96
+      const availablePx = ((297 - 40) / 25.4) * 96; // ~930px
+      const titleHeight = 60; // reserve for title
+      const usable = Math.max(usablePx(availablePx) - titleHeight, 200);
+      // leave ~1.2 line height per item
+      const size = Math.floor(usable / Math.max(1, count) / 1.2);
+      return Math.max(12, Math.min(48, size));
+    }
+
+    function usablePx(px){ return px; }
+
+    function escapeHtml(text){ return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    function aiOrderSets(){
+      alert('AI ordering: currently a placeholder. Tell me rules and I will implement.');
+    }
   </script>
 </body>
 </html>
